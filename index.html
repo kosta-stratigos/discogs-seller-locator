@@ -3,152 +3,24 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta
-      name="description"
-      content="Find Discogs marketplace sellers that have every requested release in stock."
-    >
     <title>Discogs Seller Locator</title>
     <link rel="stylesheet" href="styles.css">
-    <script type="module" src="src/app.js"></script>
   </head>
   <body>
-    <header class="app-header">
-      <div>
-        <p class="eyebrow">Discogs Seller Locator</p>
-        <h1>Find one seller for the whole stack.</h1>
-      </div>
-      <a class="header-link" href="https://github.com/kosta-stratigos/discogs-seller-locator" target="_blank" rel="noreferrer">
-        GitHub
-      </a>
-    </header>
-
-    <main class="app-shell">
-      <section class="control-surface" aria-labelledby="search-heading">
-        <div class="section-title">
-          <h2 id="search-heading">Search</h2>
-          <span id="item-count" class="pill">0 items</span>
-        </div>
-
-        <form id="locator-form" class="locator-form">
-          <label class="field">
-            <span>Discogs item links</span>
-            <textarea
-              id="item-input"
-              name="items"
-              rows="9"
-              spellcheck="false"
-              placeholder="https://www.discogs.com/release/249504-Rick-Astley-Never-Gonna-Give-You-Up"
-            ></textarea>
-          </label>
-
-          <label class="field">
-            <span>Discogs personal access token</span>
-            <input
-              id="token-input"
-              name="token"
-              type="password"
-              autocomplete="off"
-              placeholder="Optional, raises API rate limit"
-            >
-          </label>
-
-          <label class="field">
-            <span>Candidate seller usernames or links</span>
-            <textarea
-              id="seller-input"
-              class="compact-textarea"
-              name="sellers"
-              rows="3"
-              spellcheck="false"
-              placeholder="Doveholes&#10;https://www.discogs.com/seller/Doveholes/profile"
-            ></textarea>
-          </label>
-
-          <div class="form-grid">
-            <label class="field">
-              <span>Inventory pages</span>
-              <input id="page-limit-input" name="pageLimit" type="number" min="1" max="20" value="5">
-            </label>
-
-            <label class="field">
-              <span>Minimum rating</span>
-              <input id="rating-input" name="rating" type="number" min="0" max="100" step="0.1" value="0">
-            </label>
-          </div>
-
-          <div class="filter-grid">
-            <label class="field wide-field">
-              <span>Ships from</span>
-              <select id="ships-from-input" name="shipsFrom">
-                <option value="">Any ship-from country</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>Format</span>
-              <select id="format-input" name="format">
-                <option value="">Any format</option>
-                <option value="Vinyl">Vinyl</option>
-                <option value="CD">CD</option>
-                <option value="Cassette">Cassette</option>
-                <option value="Shellac">Shellac</option>
-                <option value="DVD">DVD</option>
-                <option value="Blu-ray">Blu-ray</option>
-                <option value="File">File</option>
-                <option value="8-Track Cartridge">8-Track</option>
-                <option value="Reel-To-Reel">Reel-to-reel</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>Maximum item price</span>
-              <input id="maximum-price-input" name="maximumPrice" type="number" min="0" step="0.01" placeholder="No limit">
-            </label>
-          </div>
-
-          <div class="button-row">
-            <button id="scan-button" type="submit">Scan sellers</button>
-            <button id="sample-button" type="button" class="secondary-button">Sample stack</button>
-            <button id="clear-button" type="button" class="ghost-button">Clear</button>
-          </div>
-        </form>
-      </section>
-
-      <section class="results-surface" aria-live="polite">
-        <div class="status-strip">
-          <div>
-            <p class="eyebrow">Status</p>
-            <p id="status-text" class="status-text">Ready for Discogs links.</p>
-          </div>
-          <div id="rate-text" class="rate-text"></div>
-        </div>
-
-        <div class="result-layout">
-          <section class="release-column" aria-labelledby="releases-heading">
-            <div class="section-title">
-              <h2 id="releases-heading">Requested Items</h2>
-              <span id="release-summary" class="muted">No items loaded</span>
-            </div>
-            <div id="release-list" class="release-list empty-state">
-              <p>Add release, marketplace release, master, or listing links.</p>
-            </div>
-          </section>
-
-          <section class="seller-column" aria-labelledby="sellers-heading">
-            <div class="section-title">
-              <h2 id="sellers-heading">Seller Matches</h2>
-              <span id="seller-summary" class="muted">No scan yet</span>
-            </div>
-            <div id="seller-list" class="seller-list empty-state">
-              <p>Complete sellers appear first, followed by the closest partial matches.</p>
-            </div>
-          </section>
-        </div>
-      </section>
+    <main class="page-shell">
+      <p class="eyebrow">Discogs Seller Locator</p>
+      <h1>A browser extension for finding shared Discogs sellers.</h1>
+      <p>
+        Add exact Discogs release pages to a stack, then scan the marketplace pages you can access
+        in your browser to find sellers with every item.
+      </p>
+      <ol>
+        <li>Clone or download this repository.</li>
+        <li>Open your browser extension settings and enable developer mode.</li>
+        <li>Load this folder as an unpacked extension.</li>
+        <li>Open Discogs release pages and click <strong>Add to Seller Locator</strong>.</li>
+      </ol>
+      <a href="https://github.com/kosta-stratigos/discogs-seller-locator">View the repository</a>
     </main>
-
-    <footer class="app-footer">
-      Discogs is a trademark of Zink Media, LLC. This app uses the Discogs API and is not affiliated with Discogs.
-    </footer>
   </body>
 </html>

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Discogs Seller Locator</title>
+    <link rel="stylesheet" href="popup.css">
+    <script type="module" src="src/popup.js"></script>
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header class="popup-header">
+        <div>
+          <p class="eyebrow">Discogs Seller Locator</p>
+          <h1>Shared sellers</h1>
+        </div>
+        <span id="stack-count" class="pill">0</span>
+      </header>
+
+      <section class="tool-row">
+        <button id="add-current-button" type="button">Add current release</button>
+        <button id="scan-button" type="button" class="primary-button">Find sellers</button>
+      </section>
+
+      <section class="manual-add">
+        <label class="field">
+          <span>Paste release URL</span>
+          <div class="inline-field">
+            <input id="manual-release-input" type="url" placeholder="https://www.discogs.com/release/...">
+            <button id="manual-add-button" type="button" class="secondary-button">Add</button>
+          </div>
+        </label>
+      </section>
+
+      <section class="stack-section">
+        <div class="section-title">
+          <h2>Stack</h2>
+          <button id="clear-stack-button" type="button" class="text-button">Clear</button>
+        </div>
+        <div id="stack-list" class="stack-list empty-state">
+          Add exact Discogs release pages, then scan for sellers who have them all.
+        </div>
+      </section>
+
+      <section class="filters-section">
+        <div class="section-title">
+          <h2>Filters</h2>
+        </div>
+        <div class="filter-grid">
+          <label class="field">
+            <span>Pages per release</span>
+            <input id="page-limit-input" type="number" min="1" max="20" value="3">
+          </label>
+          <label class="field">
+            <span>Minimum rating</span>
+            <input id="minimum-rating-input" type="number" min="0" max="100" step="0.1" value="0">
+          </label>
+          <label class="field">
+            <span>Ships from</span>
+            <input id="ships-from-input" type="text" placeholder="Any country">
+          </label>
+          <label class="field">
+            <span>Max item price</span>
+            <input id="maximum-price-input" type="number" min="0" step="0.01" placeholder="No limit">
+          </label>
+        </div>
+      </section>
+
+      <section class="results-section">
+        <div class="section-title">
+          <h2>Results</h2>
+          <span id="result-summary" class="muted">No scan yet</span>
+        </div>
+        <div id="status-text" class="status-text">Ready.</div>
+        <div id="result-list" class="result-list empty-state">
+          Results appear here after scanning marketplace pages.
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

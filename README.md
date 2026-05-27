@@ -1,21 +1,29 @@
 # Discogs Seller Locator
 
-A static GitHub Pages app for finding Discogs marketplace sellers that have every requested release in stock.
+A browser extension for finding Discogs marketplace sellers that have every requested release in your stack.
 
 ## How It Works
 
-1. Paste Discogs release, marketplace release, master, or listing links into the app.
-2. Add candidate seller usernames or profile links to scan known seller inventories.
-3. Scan seller inventory pages for each requested release.
-4. Review sellers with complete matches first, then partial matches.
+1. Browse Discogs normally.
+2. Open an exact release page and click **Add to Seller Locator**.
+3. Repeat for the other titles you want.
+4. Open the extension popup and click **Find sellers**.
+5. Review sellers with complete matches first, then partial matches.
 
-The app runs entirely in the browser. The optional token is sent only from the browser to the Discogs API and is not stored by the app.
+The extension scans Discogs marketplace pages from your browser session and intersects sellers locally. It does not need a Discogs personal access token.
 
-Optional filters can narrow matches by seller rating, Discogs marketplace ship-from country, release/listing format, and maximum item price before shipping.
+Optional filters can narrow matches by seller rating, ship-from text, and maximum item price before shipping.
 
-## Local Development
+## Install Locally
 
-Open `index.html` directly in a browser, or serve the folder with any static file server.
+1. Clone or download this repository.
+2. Open Chrome, Edge, or another Chromium browser.
+3. Go to `chrome://extensions`.
+4. Enable **Developer mode**.
+5. Click **Load unpacked** and select this repository folder.
+6. Open a Discogs release page and use the floating **Add to Seller Locator** button.
+
+## Development
 
 Run the unit tests with:
 
@@ -23,12 +31,8 @@ Run the unit tests with:
 npm test
 ```
 
-## GitHub Pages
-
-This repo is intentionally build-free. Configure GitHub Pages to serve the `main` branch from the repository root.
-
 ## API Notes
 
-Discogs allows release lookups and public seller inventory scans from the browser, but global seller discovery for a release is not reliably exposed through the public API. The app scans candidate seller inventories and intersects matches locally across requested releases.
+The public Discogs API does not reliably expose global seller discovery for arbitrary release stacks from a static site. This extension works from Discogs pages in the browser instead, scanning marketplace HTML that the user can already access and computing seller overlap locally.
 
 Discogs is a trademark of Zink Media, LLC. This app uses the Discogs API and is not affiliated with Discogs.
