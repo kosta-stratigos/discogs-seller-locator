@@ -18,6 +18,9 @@ const elements = {
   tokenInput: document.querySelector("#token-input"),
   pageLimitInput: document.querySelector("#page-limit-input"),
   ratingInput: document.querySelector("#rating-input"),
+  shipsFromInput: document.querySelector("#ships-from-input"),
+  formatInput: document.querySelector("#format-input"),
+  maximumPriceInput: document.querySelector("#maximum-price-input"),
   scanButton: document.querySelector("#scan-button"),
   sampleButton: document.querySelector("#sample-button"),
   clearButton: document.querySelector("#clear-button"),
@@ -83,6 +86,9 @@ async function handleSubmit(event) {
       releases: currentReleases,
       pageLimit: Number(elements.pageLimitInput.value),
       minimumRating: Number(elements.ratingInput.value),
+      shipsFrom: elements.shipsFromInput.value,
+      format: elements.formatInput.value,
+      maximumPrice: elements.maximumPriceInput.value,
       onProgress: ({ release, releaseIndex, releaseCount, page, totalPages }) => {
         setStatus(
           `Scanning ${releaseIndex + 1}/${releaseCount}: ${release.displayTitle}, page ${page}/${totalPages}.`
@@ -192,7 +198,7 @@ function renderSellers(sellers, releases, warnings = []) {
     : "No matches";
 
   if (!topSellers.length) {
-    renderNotice(elements.sellerList, "No sellers matched the requested releases in the scanned pages.");
+    renderNotice(elements.sellerList, "No sellers matched the requested releases and filters in the scanned pages.");
     return;
   }
 
@@ -266,7 +272,11 @@ function renderListingRow(release, listing) {
 
   const meta = document.createElement("p");
   meta.textContent = listing
-    ? [listing.condition, listing.sleeveCondition ? `Sleeve: ${listing.sleeveCondition}` : ""]
+    ? [
+        listing.condition,
+        listing.sleeveCondition ? `Sleeve: ${listing.sleeveCondition}` : "",
+        listing.shipsFrom ? `Ships from: ${listing.shipsFrom}` : ""
+      ]
         .filter(Boolean)
         .join(" / ")
     : "No matching listing found";
@@ -344,6 +354,9 @@ function resetApp() {
   elements.form.reset();
   elements.pageLimitInput.value = "5";
   elements.ratingInput.value = "0";
+  elements.shipsFromInput.value = "";
+  elements.formatInput.value = "";
+  elements.maximumPriceInput.value = "";
   currentReleases = [];
   updateItemCount();
   setStatus("Ready for Discogs links.");

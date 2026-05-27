@@ -64,6 +64,34 @@
             </label>
           </div>
 
+          <div class="filter-grid">
+            <label class="field wide-field">
+              <span>Ships from</span>
+              <input id="ships-from-input" name="shipsFrom" type="text" placeholder="Any country or region">
+            </label>
+
+            <label class="field">
+              <span>Format</span>
+              <select id="format-input" name="format">
+                <option value="">Any format</option>
+                <option value="Vinyl">Vinyl</option>
+                <option value="CD">CD</option>
+                <option value="Cassette">Cassette</option>
+                <option value="Shellac">Shellac</option>
+                <option value="DVD">DVD</option>
+                <option value="Blu-ray">Blu-ray</option>
+                <option value="File">File</option>
+                <option value="8-Track Cartridge">8-Track</option>
+                <option value="Reel-To-Reel">Reel-to-reel</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Maximum item price</span>
+              <input id="maximum-price-input" name="maximumPrice" type="number" min="0" step="0.01" placeholder="No limit">
+            </label>
+          </div>
+
           <div class="button-row">
             <button id="scan-button" type="submit">Scan sellers</button>
             <button id="sample-button" type="button" class="secondary-button">Sample stack</button>

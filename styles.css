@@ -36,6 +36,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -157,7 +158,8 @@ a {
 }
 
 textarea,
-input {
+input,
+select {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -173,13 +175,15 @@ textarea {
   line-height: 1.45;
 }
 
-input {
+input,
+select {
   min-height: 42px;
   padding: 0 12px;
 }
 
 textarea:focus,
-input:focus {
+input:focus,
+select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(15, 107, 98, 0.16);
 }
@@ -188,6 +192,16 @@ input:focus {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.wide-field {
+  grid-column: 1 / -1;
 }
 
 .button-row {
@@ -452,6 +466,10 @@ button:disabled {
   }
 
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-grid {
     grid-template-columns: 1fr;
   }
 

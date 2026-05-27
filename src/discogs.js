@@ -187,12 +187,16 @@ export async function searchListingsForReleases({
   releases,
   pageLimit = 5,
   minimumRating = 0,
+  shipsFrom = "",
+  format = "",
+  maximumPrice = "",
   onProgress = () => {}
 }) {
   const sellers = new Map();
   const releaseCount = releases.length;
   const safePageLimit = clampNumber(pageLimit, 1, 20);
   const ratingFloor = clampNumber(minimumRating, 0, 100);
+  const listingFilters = createListingFilters({ shipsFrom, format, maximumPrice });
   const warnings = [];
 
   for (const [releaseIndex, release] of releases.entries()) {
@@ -224,7 +228,11 @@ export async function searchListingsForReleases({
       for (const listing of listings) {
         const normalized = normalizeListing(listing, release);
 
-        if (!normalized.seller.username || normalized.seller.rating < ratingFloor) {
+        if (
+          !normalized.seller.username ||
+          normalized.seller.rating < ratingFloor ||
+          !listingPassesFilters(normalized, listingFilters)
+        ) {
           continue;
         }
 
@@ -311,14 +319,24 @@ export function normalizeListing(listing, release) {
   const shipping = listing.shipping_price ?? {};
   const value = numericPrice(price.value ?? price);
   const currency = price.currency || shipping.currency || "";
+  const shipsFrom = formatLocation(
+    listing.ships_from ??
+      listing.ships_from_location ??
+      listing.location ??
+      seller.ships_from ??
+      seller.location
+  );
+  const listingFormat = formatListingRelease(listing.release) || release.format || "";
 
   return {
     id: Number(listing.id),
     releaseId: release.id,
     releaseTitle: release.displayTitle,
+    format: listingFormat,
     condition: listing.condition || "Condition unavailable",
     sleeveCondition: listing.sleeve_condition || "",
     comments: listing.comments || "",
+    shipsFrom,
     uri: listing.uri || `https://www.discogs.com/sell/item/${listing.id}`,
     price: {
       value,
@@ -334,6 +352,42 @@ export function normalizeListing(listing, release) {
         : ""
     }
   };
+}
+
+export function createListingFilters({ shipsFrom = "", format = "", maximumPrice = "" } = {}) {
+  const shipsFromTerms = String(shipsFrom)
+    .split(/[,;\n]+/)
+    .flatMap((term) => expandLocationTerm(term))
+    .map(normalizeSearchText)
+    .filter(Boolean);
+  const uniqueShipTerms = [...new Set(shipsFromTerms)];
+  const maximum = optionalNumber(maximumPrice);
+
+  return {
+    shipsFromTerms: uniqueShipTerms,
+    format: normalizeSearchText(format),
+    maximumPrice: maximum,
+    hasAny: Boolean(uniqueShipTerms.length || format || Number.isFinite(maximum))
+  };
+}
+
+export function listingPassesFilters(listing, filters = {}) {
+  if (
+    Number.isFinite(filters.maximumPrice) &&
+    (!Number.isFinite(listing.price.value) || listing.price.value > filters.maximumPrice)
+  ) {
+    return false;
+  }
+
+  if (filters.format && !normalizeSearchText(listing.format).includes(filters.format)) {
+    return false;
+  }
+
+  if (filters.shipsFromTerms?.length && !locationMatches(listing.shipsFrom, filters.shipsFromTerms)) {
+    return false;
+  }
+
+  return true;
 }
 
 export function formatMoney(value, currency = "") {
@@ -426,6 +480,15 @@ function clampNumber(value, min, max) {
   return Math.min(max, Math.max(min, numeric));
 }
 
+function optionalNumber(value) {
+  if (value === "" || value === null || value === undefined) {
+    return Number.NaN;
+  }
+
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : Number.NaN;
+}
+
 function getOrCreateSeller(sellers, seller) {
   const key = seller.username.toLowerCase();
 
@@ -446,6 +509,97 @@ function getOrCreateSeller(sellers, seller) {
 function numericPrice(value) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : Number.NaN;
+}
+
+function formatLocation(value) {
+  if (!value) {
+    return "";
+  }
+
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (typeof value === "object") {
+    return [
+      value.city,
+      value.region,
+      value.state,
+      value.country,
+      value.name,
+      value.location
+    ]
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  return String(value).trim();
+}
+
+function formatListingRelease(release = {}) {
+  if (!release) {
+    return "";
+  }
+
+  if (typeof release.format === "string") {
+    return release.format;
+  }
+
+  if (Array.isArray(release.formats)) {
+    return formatReleaseFormats(release.formats);
+  }
+
+  if (Array.isArray(release.format)) {
+    return release.format.filter(Boolean).join(" ");
+  }
+
+  return "";
+}
+
+function expandLocationTerm(term) {
+  const normalized = normalizeSearchText(term);
+
+  if (!normalized) {
+    return [];
+  }
+
+  const aliases = {
+    us: ["us", "usa", "united states", "united states of america"],
+    usa: ["us", "usa", "united states", "united states of america"],
+    "u s": ["us", "usa", "united states", "united states of america"],
+    "united states": ["us", "usa", "united states", "united states of america"],
+    uk: ["uk", "united kingdom", "great britain"],
+    "u k": ["uk", "united kingdom", "great britain"],
+    "united kingdom": ["uk", "united kingdom", "great britain"]
+  };
+
+  return aliases[normalized] ?? [term];
+}
+
+function normalizeSearchText(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function locationMatches(location, terms) {
+  const normalizedLocation = normalizeSearchText(location);
+
+  if (!normalizedLocation) {
+    return false;
+  }
+
+  const words = normalizedLocation.split(" ");
+
+  return terms.some((term) => {
+    if (term.length <= 2) {
+      return words.includes(term);
+    }
+
+    return normalizedLocation.includes(term);
+  });
 }
 
 function formatArtists(artists = []) {

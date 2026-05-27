@@ -1,11 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  createListingFilters,
   formatMoney,
+  listingPassesFilters,
   normalizeListing,
   parseDiscogsItem,
   parseDiscogsItems,
-  rankSellerResults
+  rankSellerResults,
+  searchListingsForReleases
 } from "../src/discogs.js";
 
 test("parseDiscogsItem handles release URLs", () => {
@@ -47,15 +50,59 @@ test("normalizeListing captures seller, price, and generated listing URL", () =>
       id: 88,
       condition: "Very Good Plus (VG+)",
       price: { value: 12.5, currency: "USD" },
-      seller: { username: "RecordShop", rating: "99.4" }
+      seller: { username: "RecordShop", rating: "99.4", location: "United States" }
     },
-    { id: 249504, displayTitle: "Artist - Title" }
+    { id: 249504, displayTitle: "Artist - Title", format: "Vinyl LP" }
   );
 
   assert.equal(listing.seller.username, "RecordShop");
   assert.equal(listing.seller.rating, 99.4);
   assert.equal(listing.sortPrice, 12.5);
+  assert.equal(listing.format, "Vinyl LP");
+  assert.equal(listing.shipsFrom, "United States");
   assert.equal(listing.uri, "https://www.discogs.com/sell/item/88");
+});
+
+test("listingPassesFilters applies ship-from, format, and maximum price filters", () => {
+  const listing = normalizeListing(
+    {
+      id: 88,
+      condition: "Near Mint (NM or M-)",
+      price: { value: 18, currency: "USD" },
+      ships_from: { country: "United States" },
+      seller: { username: "RecordShop", rating: "99.4" }
+    },
+    { id: 249504, displayTitle: "Artist - Title", format: "Vinyl LP" }
+  );
+
+  assert.equal(
+    listingPassesFilters(
+      listing,
+      createListingFilters({ shipsFrom: "USA", format: "Vinyl", maximumPrice: "20" })
+    ),
+    true
+  );
+  assert.equal(
+    listingPassesFilters(
+      listing,
+      createListingFilters({ shipsFrom: "Germany", format: "Vinyl", maximumPrice: "20" })
+    ),
+    false
+  );
+  assert.equal(
+    listingPassesFilters(
+      listing,
+      createListingFilters({ shipsFrom: "USA", format: "CD", maximumPrice: "20" })
+    ),
+    false
+  );
+  assert.equal(
+    listingPassesFilters(
+      listing,
+      createListingFilters({ shipsFrom: "USA", format: "Vinyl", maximumPrice: "15" })
+    ),
+    false
+  );
 });
 
 test("rankSellerResults sorts complete cheaper sellers first", () => {
@@ -93,6 +140,55 @@ test("rankSellerResults sorts complete cheaper sellers first", () => {
   assert.deepEqual(
     ranked.map((seller) => seller.username),
     ["CompleteCheap", "CompleteExpensive", "Partial"]
+  );
+});
+
+test("searchListingsForReleases filters listings before ranking sellers", async () => {
+  const releases = [{ id: 1, displayTitle: "A", format: "Vinyl LP" }];
+  const client = {
+    async searchMarketplace() {
+      return {
+        data: {
+          pagination: { pages: 1 },
+          listings: [
+            {
+              id: 1,
+              condition: "Near Mint (NM or M-)",
+              price: { value: 12, currency: "USD" },
+              ships_from: "United States",
+              seller: { username: "USShop", rating: "99.5" }
+            },
+            {
+              id: 2,
+              condition: "Near Mint (NM or M-)",
+              price: { value: 10, currency: "USD" },
+              ships_from: "Germany",
+              seller: { username: "GermanShop", rating: "99.5" }
+            },
+            {
+              id: 3,
+              condition: "Near Mint (NM or M-)",
+              price: { value: 40, currency: "USD" },
+              ships_from: "United States",
+              seller: { username: "ExpensiveUSShop", rating: "99.5" }
+            }
+          ]
+        }
+      };
+    }
+  };
+
+  const result = await searchListingsForReleases({
+    client,
+    releases,
+    shipsFrom: "United States",
+    format: "Vinyl",
+    maximumPrice: "20"
+  });
+
+  assert.deepEqual(
+    result.sellers.map((seller) => seller.username),
+    ["USShop"]
   );
 });
 
