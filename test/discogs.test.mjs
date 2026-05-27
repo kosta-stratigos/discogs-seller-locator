@@ -145,8 +145,10 @@ test("rankSellerResults sorts complete cheaper sellers first", () => {
 
 test("searchListingsForReleases filters listings before ranking sellers", async () => {
   const releases = [{ id: 1, displayTitle: "A", format: "Vinyl LP" }];
+  const calls = [];
   const client = {
-    async searchMarketplace() {
+    async searchMarketplace(params) {
+      calls.push(params);
       return {
         data: {
           pagination: { pages: 1 },
@@ -186,6 +188,9 @@ test("searchListingsForReleases filters listings before ranking sellers", async 
     maximumPrice: "20"
   });
 
+  assert.equal(calls[0].ships_from, "United States");
+  assert.equal(calls[0].format, "Vinyl");
+  assert.equal(calls[0].price_max, "20");
   assert.deepEqual(
     result.sellers.map((seller) => seller.username),
     ["USShop"]

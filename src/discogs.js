@@ -217,7 +217,10 @@ export async function searchListingsForReleases({
         page,
         per_page: 100,
         sort: "price",
-        sort_order: "asc"
+        sort_order: "asc",
+        ships_from: shipsFrom,
+        format,
+        price_max: maximumPrice
       });
 
       const payload = response.data ?? {};
@@ -578,6 +581,8 @@ function expandLocationTerm(term) {
 
 function normalizeSearchText(value) {
   return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim()

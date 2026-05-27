@@ -11,7 +11,7 @@ A static GitHub Pages app for finding Discogs marketplace sellers that have ever
 
 The app runs entirely in the browser. The token is sent only from the browser to the Discogs API and is not stored by the app.
 
-Optional filters can narrow matches by seller rating, seller ship-from location, release/listing format, and maximum item price before shipping.
+Optional filters can narrow matches by seller rating, Discogs marketplace ship-from country, release/listing format, and maximum item price before shipping.
 
 ## Local Development
 

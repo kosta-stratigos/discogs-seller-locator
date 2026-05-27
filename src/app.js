@@ -12,6 +12,188 @@ const SAMPLE_STACK = [
   "https://www.discogs.com/release/397699-Rick-Astley-Whenever-You-Need-Somebody"
 ].join("\n");
 
+const COMMON_SHIP_FROM_COUNTRIES = [
+  "United States",
+  "United Kingdom",
+  "Canada",
+  "Australia",
+  "Germany",
+  "Netherlands",
+  "Japan",
+  "France",
+  "Italy",
+  "Spain",
+  "Sweden",
+  "Belgium"
+];
+
+const DISCOGS_SHIP_FROM_COUNTRIES = [
+  "Afghanistan",
+  "Albania",
+  "Algeria",
+  "Andorra",
+  "Angola",
+  "Antigua & Barbuda",
+  "Argentina",
+  "Armenia",
+  "Aruba",
+  "Australia",
+  "Austria",
+  "Azerbaijan",
+  "Bahamas",
+  "Bahrain",
+  "Bangladesh",
+  "Barbados",
+  "Belarus",
+  "Belgium",
+  "Belize",
+  "Benin",
+  "Bermuda",
+  "Bhutan",
+  "Bolivia",
+  "Bosnia & Herzegovina",
+  "Botswana",
+  "Brazil",
+  "British Virgin Islands",
+  "Brunei",
+  "Bulgaria",
+  "Burkina Faso",
+  "Burundi",
+  "Cambodia",
+  "Cameroon",
+  "Canada",
+  "Cape Verde",
+  "Cayman Islands",
+  "Central African Republic",
+  "Chad",
+  "Chile",
+  "China",
+  "Colombia",
+  "Comoros",
+  "Congo",
+  "Cook Islands",
+  "Costa Rica",
+  "Croatia",
+  "Cyprus",
+  "Czech Republic",
+  "Denmark",
+  "Djibouti",
+  "Dominica",
+  "Dominican Republic",
+  "Ecuador",
+  "Egypt",
+  "El Salvador",
+  "Equatorial Guinea",
+  "Estonia",
+  "Ethiopia",
+  "Falkland Islands",
+  "Faroe Islands",
+  "Fiji",
+  "Finland",
+  "France",
+  "French Guiana",
+  "French Polynesia",
+  "Gabon",
+  "Gambia",
+  "Georgia",
+  "Germany",
+  "Ghana",
+  "Gibraltar",
+  "Greece",
+  "Greenland",
+  "Grenada",
+  "Guadeloupe",
+  "Guatemala",
+  "Guernsey",
+  "Guinea",
+  "Guinea-Bissau",
+  "Guyana",
+  "Haiti",
+  "Honduras",
+  "Hong Kong",
+  "Hungary",
+  "Iceland",
+  "India",
+  "Indonesia",
+  "Ireland",
+  "Isle Of Man",
+  "Israel",
+  "Italy",
+  "Jamaica",
+  "Japan",
+  "Jersey",
+  "Jordan",
+  "Kazakhstan",
+  "Kenya",
+  "Kuwait",
+  "Kyrgyzstan",
+  "Latvia",
+  "Lebanon",
+  "Liechtenstein",
+  "Lithuania",
+  "Luxembourg",
+  "Macedonia",
+  "Madagascar",
+  "Malaysia",
+  "Maldives",
+  "Malta",
+  "Martinique",
+  "Mauritius",
+  "Mexico",
+  "Moldova",
+  "Monaco",
+  "Mongolia",
+  "Montenegro",
+  "Morocco",
+  "Mozambique",
+  "Namibia",
+  "Nepal",
+  "Netherlands",
+  "New Caledonia",
+  "New Zealand",
+  "Nicaragua",
+  "Nigeria",
+  "Norway",
+  "Oman",
+  "Pakistan",
+  "Panama",
+  "Paraguay",
+  "Peru",
+  "Philippines",
+  "Poland",
+  "Portugal",
+  "Puerto Rico",
+  "Qatar",
+  "Romania",
+  "Russia",
+  "Saint Lucia",
+  "San Marino",
+  "Saudi Arabia",
+  "Senegal",
+  "Serbia",
+  "Singapore",
+  "Slovakia",
+  "Slovenia",
+  "South Africa",
+  "South Korea",
+  "Spain",
+  "Sri Lanka",
+  "Sweden",
+  "Switzerland",
+  "Taiwan",
+  "Thailand",
+  "Trinidad & Tobago",
+  "Tunisia",
+  "Turkey",
+  "Ukraine",
+  "United Arab Emirates",
+  "United Kingdom",
+  "United States",
+  "Uruguay",
+  "Venezuela",
+  "Vietnam"
+];
+
 const elements = {
   form: document.querySelector("#locator-form"),
   itemInput: document.querySelector("#item-input"),
@@ -35,6 +217,7 @@ const elements = {
 
 let currentReleases = [];
 
+populateShipsFromSelect();
 elements.itemInput.addEventListener("input", updateItemCount);
 elements.form.addEventListener("submit", handleSubmit);
 elements.sampleButton.addEventListener("click", () => {
@@ -45,6 +228,31 @@ elements.sampleButton.addEventListener("click", () => {
 elements.clearButton.addEventListener("click", resetApp);
 
 updateItemCount();
+
+function populateShipsFromSelect() {
+  const commonGroup = document.createElement("optgroup");
+  commonGroup.label = "Common";
+  commonGroup.append(...COMMON_SHIP_FROM_COUNTRIES.map(createOption));
+
+  const common = new Set(COMMON_SHIP_FROM_COUNTRIES);
+  const allGroup = document.createElement("optgroup");
+  allGroup.label = "All countries";
+  allGroup.append(
+    ...DISCOGS_SHIP_FROM_COUNTRIES
+      .filter((country) => !common.has(country))
+      .sort((a, b) => a.localeCompare(b))
+      .map(createOption)
+  );
+
+  elements.shipsFromInput.append(commonGroup, allGroup);
+}
+
+function createOption(value) {
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = value;
+  return option;
+}
 
 async function handleSubmit(event) {
   event.preventDefault();
