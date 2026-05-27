@@ -175,6 +175,10 @@ textarea {
   line-height: 1.45;
 }
 
+.compact-textarea {
+  min-height: 78px;
+}
+
 input,
 select {
   min-height: 42px;

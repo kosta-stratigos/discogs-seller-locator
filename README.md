@@ -5,8 +5,8 @@ A static GitHub Pages app for finding Discogs marketplace sellers that have ever
 ## How It Works
 
 1. Paste Discogs release, marketplace release, master, or listing links into the app.
-2. Add a Discogs personal access token.
-3. Scan the marketplace pages for each requested release.
+2. Add candidate seller usernames or profile links to scan known seller inventories, or add a Discogs personal access token to try global marketplace search.
+3. Scan seller inventory or marketplace pages for each requested release.
 4. Review sellers with complete matches first, then partial matches.
 
 The app runs entirely in the browser. The token is sent only from the browser to the Discogs API and is not stored by the app.

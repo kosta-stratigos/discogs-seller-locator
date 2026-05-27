@@ -48,13 +48,25 @@
               name="token"
               type="password"
               autocomplete="off"
-              placeholder="Required for marketplace seller search"
+              placeholder="Required for global marketplace search"
             >
+          </label>
+
+          <label class="field">
+            <span>Candidate seller usernames or links</span>
+            <textarea
+              id="seller-input"
+              class="compact-textarea"
+              name="sellers"
+              rows="3"
+              spellcheck="false"
+              placeholder="Doveholes&#10;https://www.discogs.com/seller/Doveholes/profile"
+            ></textarea>
           </label>
 
           <div class="form-grid">
             <label class="field">
-              <span>Pages per item</span>
+              <span>Pages to scan</span>
               <input id="page-limit-input" name="pageLimit" type="number" min="1" max="20" value="5">
             </label>
 

@@ -3,7 +3,9 @@ import {
   createDiscogsClient,
   formatMoney,
   parseDiscogsItems,
+  parseDiscogsSellers,
   resolveRequestedItem,
+  searchListingsForSellerCandidates,
   searchListingsForReleases
 } from "./discogs.js";
 
@@ -197,6 +199,7 @@ const DISCOGS_SHIP_FROM_COUNTRIES = [
 const elements = {
   form: document.querySelector("#locator-form"),
   itemInput: document.querySelector("#item-input"),
+  sellerInput: document.querySelector("#seller-input"),
   tokenInput: document.querySelector("#token-input"),
   pageLimitInput: document.querySelector("#page-limit-input"),
   ratingInput: document.querySelector("#rating-input"),
@@ -258,6 +261,7 @@ async function handleSubmit(event) {
   event.preventDefault();
 
   const items = parseDiscogsItems(elements.itemInput.value);
+  const sellers = parseDiscogsSellers(elements.sellerInput.value);
   const token = elements.tokenInput.value.trim();
 
   if (!items.length) {
@@ -270,20 +274,44 @@ async function handleSubmit(event) {
   setStatus("Loading requested items.");
   elements.rateText.textContent = "";
   elements.sellerSummary.textContent = "Waiting";
-  renderNotice(elements.sellerList, "Marketplace scan will start after item details load.");
+  renderNotice(elements.sellerList, "Seller scan will start after item details load.");
 
   try {
     const client = createDiscogsClient({ token });
     currentReleases = await loadReleases(items, client);
     renderReleases(currentReleases);
 
+    if (sellers.length) {
+      setStatus("Scanning candidate seller inventories.");
+
+      const searchResult = await searchListingsForSellerCandidates({
+        client,
+        releases: currentReleases,
+        sellers,
+        pageLimit: Number(elements.pageLimitInput.value),
+        minimumRating: Number(elements.ratingInput.value),
+        shipsFrom: elements.shipsFromInput.value,
+        format: elements.formatInput.value,
+        maximumPrice: elements.maximumPriceInput.value,
+        onProgress: ({ seller, sellerIndex, sellerCount, page, totalPages }) => {
+          setStatus(
+            `Scanning ${sellerIndex + 1}/${sellerCount}: ${seller.username}, page ${page}/${totalPages}.`
+          );
+        }
+      });
+
+      renderSellers(searchResult.sellers, currentReleases, searchResult.warnings);
+      finishSellerStatus(searchResult.sellers);
+      return;
+    }
+
     if (!token) {
-      setStatus("Add a Discogs personal access token to scan marketplace sellers.");
+      setStatus("Add a token for global search, or add candidate seller usernames.");
       renderNotice(
         elements.sellerList,
-        "Release data loaded. Seller matching needs authenticated Discogs marketplace search."
+        "Release data loaded. Global seller discovery needs a token; known sellers can be scanned by username without one."
       );
-      elements.sellerSummary.textContent = "Token required";
+      elements.sellerSummary.textContent = "Token or sellers required";
       return;
     }
 
@@ -305,17 +333,21 @@ async function handleSubmit(event) {
     });
 
     renderSellers(searchResult.sellers, currentReleases, searchResult.warnings);
-    const completeCount = searchResult.sellers.filter((seller) => seller.isComplete).length;
-    setStatus(
-      completeCount
-        ? `Found ${completeCount} complete seller ${completeCount === 1 ? "match" : "matches"}.`
-        : "No complete seller found in the scanned pages."
-    );
+    finishSellerStatus(searchResult.sellers);
   } catch (error) {
     renderError(error);
   } finally {
     setBusy(false);
   }
+}
+
+function finishSellerStatus(sellers) {
+  const completeCount = sellers.filter((seller) => seller.isComplete).length;
+  setStatus(
+    completeCount
+      ? `Found ${completeCount} complete seller ${completeCount === 1 ? "match" : "matches"}.`
+      : "No complete seller found in the scanned pages."
+  );
 }
 
 async function loadReleases(items, client) {
@@ -524,6 +556,10 @@ function renderError(error) {
 }
 
 function formatError(error) {
+  if (error instanceof DiscogsApiError && error.status === 404) {
+    return "Discogs global marketplace search is not available here. Add candidate seller usernames or profile links to scan public seller inventories.";
+  }
+
   if (error instanceof DiscogsApiError && error.status === 401) {
     return "Discogs rejected the token. Check the personal access token and scan again.";
   }
@@ -544,6 +580,7 @@ function setBusy(isBusy) {
   elements.scanButton.disabled = isBusy;
   elements.sampleButton.disabled = isBusy;
   elements.clearButton.disabled = isBusy;
+  elements.sellerInput.disabled = isBusy;
 }
 
 function setStatus(message) {
@@ -562,6 +599,7 @@ function resetApp() {
   elements.form.reset();
   elements.pageLimitInput.value = "5";
   elements.ratingInput.value = "0";
+  elements.sellerInput.value = "";
   elements.shipsFromInput.value = "";
   elements.formatInput.value = "";
   elements.maximumPriceInput.value = "";

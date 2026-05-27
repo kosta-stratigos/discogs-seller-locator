@@ -1,6 +1,7 @@
 export const API_BASE_URL = "https://api.discogs.com";
 
 const ITEM_SPLIT_PATTERN = /[\n,]+/;
+const SELLER_SPLIT_PATTERN = /[\n,;]+/;
 
 export class DiscogsApiError extends Error {
   constructor(message, { status = 0, payload = null } = {}) {
@@ -71,6 +72,57 @@ export function parseDiscogsItems(input) {
   return dedupeParsedItems(parsed);
 }
 
+export function parseDiscogsSeller(value) {
+  const source = String(value ?? "").trim();
+
+  if (!source) {
+    return { username: "", source, error: "Empty seller" };
+  }
+
+  const asUrl = coerceDiscogsUrl(source);
+
+  if (asUrl) {
+    const parts = asUrl.pathname.split("/").filter(Boolean);
+    const sellerIndex = parts.indexOf("seller");
+    const userIndex = parts.indexOf("user");
+    const usersIndex = parts.indexOf("users");
+
+    if (sellerIndex >= 0 && parts[sellerIndex + 1]) {
+      return sellerResult(parts[sellerIndex + 1], source);
+    }
+
+    if (userIndex >= 0 && parts[userIndex + 1]) {
+      return sellerResult(parts[userIndex + 1], source);
+    }
+
+    if (usersIndex >= 0 && parts[usersIndex + 1]) {
+      return sellerResult(parts[usersIndex + 1], source);
+    }
+  }
+
+  return sellerResult(source.replace(/^@/, ""), source);
+}
+
+export function parseDiscogsSellers(input) {
+  const sellers = String(input ?? "")
+    .split(SELLER_SPLIT_PATTERN)
+    .map(parseDiscogsSeller)
+    .filter((seller) => seller.username);
+  const seen = new Set();
+  const deduped = [];
+
+  for (const seller of sellers) {
+    const key = seller.username.toLowerCase();
+
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(seller);
+    }
+  }
+
+  return deduped;
+}
+
 export function createDiscogsClient({ token = "", fetchImpl = globalThis.fetch } = {}) {
   if (typeof fetchImpl !== "function") {
     throw new TypeError("A fetch implementation is required.");
@@ -122,6 +174,9 @@ export function createDiscogsClient({ token = "", fetchImpl = globalThis.fetch }
     },
     async fetchListing(id) {
       return request(`/marketplace/listings/${id}`);
+    },
+    async fetchUserInventory(username, params = {}) {
+      return request(`/users/${encodeURIComponent(username)}/inventory`, params);
     },
     async searchMarketplace(params) {
       return request("/marketplace/search", params);
@@ -264,6 +319,90 @@ export async function searchListingsForReleases({
   };
 }
 
+export async function searchListingsForSellerCandidates({
+  client,
+  releases,
+  sellers,
+  pageLimit = 5,
+  minimumRating = 0,
+  shipsFrom = "",
+  format = "",
+  maximumPrice = "",
+  onProgress = () => {}
+}) {
+  const sellerResults = new Map();
+  const releaseMap = new Map(releases.map((release) => [release.id, release]));
+  const safePageLimit = clampNumber(pageLimit, 1, 20);
+  const ratingFloor = clampNumber(minimumRating, 0, 100);
+  const listingFilters = createListingFilters({ shipsFrom, format, maximumPrice });
+  const warnings = [];
+
+  for (const [sellerIndex, seller] of sellers.entries()) {
+    let totalPages = 1;
+    let page = 1;
+
+    while (page <= Math.min(totalPages, safePageLimit)) {
+      onProgress({
+        seller,
+        sellerIndex,
+        sellerCount: sellers.length,
+        page,
+        totalPages: Math.min(totalPages, safePageLimit)
+      });
+
+      const response = await client.fetchUserInventory(seller.username, {
+        status: "For Sale",
+        page,
+        per_page: 100
+      });
+      const payload = response.data ?? {};
+      const listings = Array.isArray(payload.listings) ? payload.listings : [];
+
+      totalPages = Math.max(1, Number(payload.pagination?.pages) || 1);
+
+      for (const listing of listings) {
+        const releaseId = getListingReleaseId(listing);
+        const release = releaseMap.get(releaseId);
+
+        if (!release) {
+          continue;
+        }
+
+        const normalized = normalizeListing(listing, release, { username: seller.username });
+
+        if (
+          !normalized.seller.username ||
+          normalized.seller.rating < ratingFloor ||
+          !listingPassesFilters(normalized, listingFilters)
+        ) {
+          continue;
+        }
+
+        const matchedSeller = getOrCreateSeller(sellerResults, normalized.seller);
+        const existing = matchedSeller.listingsByRelease.get(release.id);
+
+        if (!existing || normalized.sortPrice < existing.sortPrice) {
+          matchedSeller.listingsByRelease.set(release.id, normalized);
+        }
+      }
+
+      page += 1;
+    }
+
+    if (totalPages > safePageLimit) {
+      warnings.push(
+        `${seller.username} had ${totalPages} inventory pages; scanned ${safePageLimit}.`
+      );
+    }
+  }
+
+  return {
+    sellers: rankSellerResults([...sellerResults.values()], releases),
+    warnings,
+    releaseCount: releases.length
+  };
+}
+
 export function rankSellerResults(sellers, releases) {
   const releaseIds = releases.map((release) => release.id);
 
@@ -316,8 +455,11 @@ export function normalizeRelease(release) {
   };
 }
 
-export function normalizeListing(listing, release) {
-  const seller = listing.seller ?? {};
+export function normalizeListing(listing, release, fallbackSeller = {}) {
+  const seller = { ...fallbackSeller, ...(listing.seller ?? {}) };
+  const sellerUsername = seller.username || seller.name || "";
+  const sellerUrl = seller.html_url ||
+    (sellerUsername ? `https://www.discogs.com/seller/${encodeURIComponent(sellerUsername)}/profile` : "");
   const price = listing.price ?? {};
   const shipping = listing.shipping_price ?? {};
   const value = numericPrice(price.value ?? price);
@@ -329,7 +471,9 @@ export function normalizeListing(listing, release) {
       seller.ships_from ??
       seller.location
   );
-  const listingFormat = formatListingRelease(listing.release) || release.format || "";
+  const listingFormat = [formatListingRelease(listing.release), release.format]
+    .filter(Boolean)
+    .join(" ");
 
   return {
     id: Number(listing.id),
@@ -348,11 +492,9 @@ export function normalizeListing(listing, release) {
     },
     sortPrice: Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER,
     seller: {
-      username: seller.username || seller.name || "",
-      rating: Number(seller.rating) || 0,
-      url: seller.username
-        ? `https://www.discogs.com/seller/${encodeURIComponent(seller.username)}/profile`
-        : ""
+      username: sellerUsername,
+      rating: Number(seller.rating ?? seller.stats?.rating) || 0,
+      url: sellerUrl
     }
   };
 }
@@ -369,6 +511,7 @@ export function createListingFilters({ shipsFrom = "", format = "", maximumPrice
   return {
     shipsFromTerms: uniqueShipTerms,
     format: normalizeSearchText(format),
+    formatTerms: expandFormatTerm(format).map(normalizeSearchText).filter(Boolean),
     maximumPrice: maximum,
     hasAny: Boolean(uniqueShipTerms.length || format || Number.isFinite(maximum))
   };
@@ -382,7 +525,10 @@ export function listingPassesFilters(listing, filters = {}) {
     return false;
   }
 
-  if (filters.format && !normalizeSearchText(listing.format).includes(filters.format)) {
+  if (
+    filters.formatTerms?.length &&
+    !filters.formatTerms.some((term) => normalizeSearchText(listing.format).includes(term))
+  ) {
     return false;
   }
 
@@ -441,6 +587,14 @@ function idResult(type, rawId, source) {
   return id
     ? { type, id, source }
     : { type: "unknown", source, error: `Could not parse ${type} ID` };
+}
+
+function sellerResult(rawUsername, source) {
+  const username = decodeURIComponent(String(rawUsername ?? "")).trim();
+
+  return username
+    ? { username, source }
+    : { username: "", source, error: "Could not parse seller username" };
 }
 
 function parseNumericId(value) {
@@ -514,6 +668,17 @@ function numericPrice(value) {
   return Number.isFinite(numeric) ? numeric : Number.NaN;
 }
 
+function getListingReleaseId(listing) {
+  const id = Number(listing.release?.id);
+
+  if (Number.isSafeInteger(id) && id > 0) {
+    return id;
+  }
+
+  const match = String(listing.release?.resource_url ?? listing.resource_url ?? "").match(/\/releases\/(\d+)/);
+  return match ? Number(match[1]) : 0;
+}
+
 function formatLocation(value) {
   if (!value) {
     return "";
@@ -577,6 +742,28 @@ function expandLocationTerm(term) {
   };
 
   return aliases[normalized] ?? [term];
+}
+
+function expandFormatTerm(format) {
+  const normalized = normalizeSearchText(format);
+
+  if (!normalized) {
+    return [];
+  }
+
+  const aliases = {
+    vinyl: ["vinyl", "lp", "12", "10", "7"],
+    cd: ["cd", "cdr", "cd r"],
+    cassette: ["cassette", "cass"],
+    shellac: ["shellac"],
+    dvd: ["dvd"],
+    "blu ray": ["blu ray", "bluray"],
+    file: ["file"],
+    "8 track cartridge": ["8 track cartridge", "8 track"],
+    "reel to reel": ["reel to reel", "reel"]
+  };
+
+  return aliases[normalized] ?? [format];
 }
 
 function normalizeSearchText(value) {

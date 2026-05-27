@@ -7,7 +7,9 @@ import {
   normalizeListing,
   parseDiscogsItem,
   parseDiscogsItems,
+  parseDiscogsSellers,
   rankSellerResults,
+  searchListingsForSellerCandidates,
   searchListingsForReleases
 } from "../src/discogs.js";
 
@@ -44,13 +46,27 @@ test("parseDiscogsItems deduplicates release IDs", () => {
   );
 });
 
+test("parseDiscogsSellers handles usernames and seller profile URLs", () => {
+  const parsed = parseDiscogsSellers(`
+    Doveholes
+    https://www.discogs.com/seller/Doveholes/profile
+    https://www.discogs.com/user/OtherSeller
+  `);
+
+  assert.deepEqual(
+    parsed.map((seller) => seller.username),
+    ["Doveholes", "OtherSeller"]
+  );
+});
+
 test("normalizeListing captures seller, price, and generated listing URL", () => {
   const listing = normalizeListing(
     {
       id: 88,
       condition: "Very Good Plus (VG+)",
       price: { value: 12.5, currency: "USD" },
-      seller: { username: "RecordShop", rating: "99.4", location: "United States" }
+      release: { format: "LP, Album" },
+      seller: { username: "RecordShop", stats: { rating: "99.4" }, location: "United States" }
     },
     { id: 249504, displayTitle: "Artist - Title", format: "Vinyl LP" }
   );
@@ -58,7 +74,7 @@ test("normalizeListing captures seller, price, and generated listing URL", () =>
   assert.equal(listing.seller.username, "RecordShop");
   assert.equal(listing.seller.rating, 99.4);
   assert.equal(listing.sortPrice, 12.5);
-  assert.equal(listing.format, "Vinyl LP");
+  assert.equal(listing.format, "LP, Album Vinyl LP");
   assert.equal(listing.shipsFrom, "United States");
   assert.equal(listing.uri, "https://www.discogs.com/sell/item/88");
 });
@@ -69,6 +85,7 @@ test("listingPassesFilters applies ship-from, format, and maximum price filters"
       id: 88,
       condition: "Near Mint (NM or M-)",
       price: { value: 18, currency: "USD" },
+      release: { format: "LP, Album" },
       ships_from: { country: "United States" },
       seller: { username: "RecordShop", rating: "99.4" }
     },
@@ -102,6 +119,24 @@ test("listingPassesFilters applies ship-from, format, and maximum price filters"
       createListingFilters({ shipsFrom: "USA", format: "Vinyl", maximumPrice: "15" })
     ),
     false
+  );
+});
+
+test("listingPassesFilters treats LP listings as vinyl", () => {
+  const listing = normalizeListing(
+    {
+      id: 88,
+      condition: "Near Mint (NM or M-)",
+      price: { value: 18, currency: "USD" },
+      release: { format: "LP, Album" },
+      seller: { username: "RecordShop", rating: "99.4" }
+    },
+    { id: 249504, displayTitle: "Artist - Title", format: "" }
+  );
+
+  assert.equal(
+    listingPassesFilters(listing, createListingFilters({ format: "Vinyl" })),
+    true
   );
 });
 
@@ -195,6 +230,59 @@ test("searchListingsForReleases filters listings before ranking sellers", async 
     result.sellers.map((seller) => seller.username),
     ["USShop"]
   );
+});
+
+test("searchListingsForSellerCandidates finds complete matches from seller inventory", async () => {
+  const releases = [
+    { id: 4909657, displayTitle: "Finis Africae - El Secreto De Las 12", format: "Vinyl LP" },
+    { id: 23554559, displayTitle: "Thomas Bush - Preludes", format: "Vinyl 12\"" }
+  ];
+  const calls = [];
+  const client = {
+    async fetchUserInventory(username, params) {
+      calls.push({ username, params });
+      return {
+        data: {
+          pagination: { pages: 1 },
+          listings: [
+            {
+              id: 4034023267,
+              condition: "Near Mint (NM or M-)",
+              sleeve_condition: "Very Good Plus (VG+)",
+              price: { value: 29, currency: "EUR" },
+              ships_from: "Sweden",
+              release: { id: 4909657, format: "LP, MiniAlbum, Comp" },
+              seller: { username: "Doveholes", stats: { rating: "100.0" } }
+            },
+            {
+              id: 4034024000,
+              condition: "Near Mint (NM or M-)",
+              sleeve_condition: "Very Good (VG)",
+              price: { value: 25, currency: "EUR" },
+              ships_from: "Sweden",
+              release: { id: 23554559, format: "12\", Album" },
+              seller: { username: "Doveholes", stats: { rating: "100.0" } }
+            }
+          ]
+        }
+      };
+    }
+  };
+
+  const result = await searchListingsForSellerCandidates({
+    client,
+    releases,
+    sellers: parseDiscogsSellers("Doveholes"),
+    shipsFrom: "Sweden",
+    format: "Vinyl",
+    maximumPrice: "30"
+  });
+
+  assert.equal(calls[0].username, "Doveholes");
+  assert.equal(calls[0].params.status, "For Sale");
+  assert.equal(result.sellers[0].username, "Doveholes");
+  assert.equal(result.sellers[0].isComplete, true);
+  assert.equal(result.sellers[0].subtotal, 54);
 });
 
 test("formatMoney falls back for invalid currency codes", () => {
