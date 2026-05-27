@@ -5,8 +5,7 @@ import {
   parseDiscogsItems,
   parseDiscogsSellers,
   resolveRequestedItem,
-  searchListingsForSellerCandidates,
-  searchListingsForReleases
+  searchListingsForSellerCandidates
 } from "./discogs.js";
 
 const SAMPLE_STACK = [
@@ -281,53 +280,30 @@ async function handleSubmit(event) {
     currentReleases = await loadReleases(items, client);
     renderReleases(currentReleases);
 
-    if (sellers.length) {
-      setStatus("Scanning candidate seller inventories.");
-
-      const searchResult = await searchListingsForSellerCandidates({
-        client,
-        releases: currentReleases,
-        sellers,
-        pageLimit: Number(elements.pageLimitInput.value),
-        minimumRating: Number(elements.ratingInput.value),
-        shipsFrom: elements.shipsFromInput.value,
-        format: elements.formatInput.value,
-        maximumPrice: elements.maximumPriceInput.value,
-        onProgress: ({ seller, sellerIndex, sellerCount, page, totalPages }) => {
-          setStatus(
-            `Scanning ${sellerIndex + 1}/${sellerCount}: ${seller.username}, page ${page}/${totalPages}.`
-          );
-        }
-      });
-
-      renderSellers(searchResult.sellers, currentReleases, searchResult.warnings);
-      finishSellerStatus(searchResult.sellers);
-      return;
-    }
-
-    if (!token) {
-      setStatus("Add a token for global search, or add candidate seller usernames.");
+    if (!sellers.length) {
+      setStatus("Add candidate seller usernames or profile links to scan.");
       renderNotice(
         elements.sellerList,
-        "Release data loaded. Global seller discovery needs a token; known sellers can be scanned by username without one."
+        "Release data loaded. Seller matching scans public inventories for the seller usernames you provide."
       );
-      elements.sellerSummary.textContent = "Token or sellers required";
+      elements.sellerSummary.textContent = "Sellers required";
       return;
     }
 
-    setStatus("Scanning marketplace listings.");
+    setStatus("Scanning candidate seller inventories.");
 
-    const searchResult = await searchListingsForReleases({
+    const searchResult = await searchListingsForSellerCandidates({
       client,
       releases: currentReleases,
+      sellers,
       pageLimit: Number(elements.pageLimitInput.value),
       minimumRating: Number(elements.ratingInput.value),
       shipsFrom: elements.shipsFromInput.value,
       format: elements.formatInput.value,
       maximumPrice: elements.maximumPriceInput.value,
-      onProgress: ({ release, releaseIndex, releaseCount, page, totalPages }) => {
+      onProgress: ({ seller, sellerIndex, sellerCount, page, totalPages }) => {
         setStatus(
-          `Scanning ${releaseIndex + 1}/${releaseCount}: ${release.displayTitle}, page ${page}/${totalPages}.`
+          `Scanning ${sellerIndex + 1}/${sellerCount}: ${seller.username}, page ${page}/${totalPages}.`
         );
       }
     });
@@ -557,7 +533,7 @@ function renderError(error) {
 
 function formatError(error) {
   if (error instanceof DiscogsApiError && error.status === 404) {
-    return "Discogs global marketplace search is not available here. Add candidate seller usernames or profile links to scan public seller inventories.";
+    return "Discogs could not find that resource. Check the release or seller link and scan again.";
   }
 
   if (error instanceof DiscogsApiError && error.status === 401) {
@@ -565,7 +541,7 @@ function formatError(error) {
   }
 
   if (error instanceof DiscogsApiError && /authenticate/i.test(error.message)) {
-    return "Discogs marketplace search requires a personal access token.";
+    return "Discogs rejected the request. Check the token or try again without it.";
   }
 
   return error?.message || "Something went wrong while searching Discogs.";

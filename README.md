@@ -5,11 +5,11 @@ A static GitHub Pages app for finding Discogs marketplace sellers that have ever
 ## How It Works
 
 1. Paste Discogs release, marketplace release, master, or listing links into the app.
-2. Add candidate seller usernames or profile links to scan known seller inventories, or add a Discogs personal access token to try global marketplace search.
-3. Scan seller inventory or marketplace pages for each requested release.
+2. Add candidate seller usernames or profile links to scan known seller inventories.
+3. Scan seller inventory pages for each requested release.
 4. Review sellers with complete matches first, then partial matches.
 
-The app runs entirely in the browser. The token is sent only from the browser to the Discogs API and is not stored by the app.
+The app runs entirely in the browser. The optional token is sent only from the browser to the Discogs API and is not stored by the app.
 
 Optional filters can narrow matches by seller rating, Discogs marketplace ship-from country, release/listing format, and maximum item price before shipping.
 
@@ -29,6 +29,6 @@ This repo is intentionally build-free. Configure GitHub Pages to serve the `main
 
 ## API Notes
 
-Discogs allows unauthenticated release lookups, but marketplace seller search requires an authenticated personal access token. The app uses the authenticated `/marketplace/search` endpoint for seller discovery and intersects sellers locally across requested releases.
+Discogs allows release lookups and public seller inventory scans from the browser, but global seller discovery for a release is not reliably exposed through the public API. The app scans candidate seller inventories and intersects matches locally across requested releases.
 
 Discogs is a trademark of Zink Media, LLC. This app uses the Discogs API and is not affiliated with Discogs.
