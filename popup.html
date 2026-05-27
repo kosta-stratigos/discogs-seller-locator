@@ -24,9 +24,9 @@
 
       <section class="manual-add">
         <label class="field">
-          <span>Paste release URL</span>
+          <span>Paste release or master URL</span>
           <div class="inline-field">
-            <input id="manual-release-input" type="url" placeholder="https://www.discogs.com/release/...">
+            <input id="manual-release-input" type="url" placeholder="https://www.discogs.com/master/...">
             <button id="manual-add-button" type="button" class="secondary-button">Add</button>
           </div>
         </label>
@@ -50,6 +50,10 @@
           <label class="field">
             <span>Pages per release</span>
             <input id="page-limit-input" type="number" min="1" max="20" value="3">
+          </label>
+          <label class="field">
+            <span>Versions per master</span>
+            <input id="version-limit-input" type="number" min="1" max="100" value="25">
           </label>
           <label class="field">
             <span>Minimum rating</span>

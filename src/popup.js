@@ -1,6 +1,6 @@
 import {
   formatMoney,
-  parseDiscogsReleaseUrl,
+  parseDiscogsTargetUrl,
   scanMarketplaceForReleases
 } from "./scanner.js";
 
@@ -13,6 +13,7 @@ const elements = {
   stackCount: document.querySelector("#stack-count"),
   stackList: document.querySelector("#stack-list"),
   pageLimitInput: document.querySelector("#page-limit-input"),
+  versionLimitInput: document.querySelector("#version-limit-input"),
   minimumRatingInput: document.querySelector("#minimum-rating-input"),
   shipsFromInput: document.querySelector("#ships-from-input"),
   maximumPriceInput: document.querySelector("#maximum-price-input"),
@@ -44,7 +45,7 @@ async function addCurrentRelease() {
     const release = await getCurrentRelease();
 
     if (!release) {
-      setStatus("Open an exact Discogs release page, then try again.");
+      setStatus("Open a Discogs release or master page, then try again.");
       return;
     }
 
@@ -56,10 +57,10 @@ async function addCurrentRelease() {
 }
 
 async function addManualRelease() {
-  const release = parseDiscogsReleaseUrl(elements.manualReleaseInput.value);
+  const release = parseDiscogsTargetUrl(elements.manualReleaseInput.value);
 
   if (!release) {
-    setStatus("Paste an exact Discogs release URL.");
+    setStatus("Paste a Discogs release or master URL.");
     return;
   }
 
@@ -69,17 +70,18 @@ async function addManualRelease() {
 }
 
 async function addRelease(release) {
-  const exists = stack.some((item) => item.id === release.id);
+  const target = normalizeTarget(release);
+  const exists = stack.some((item) => getTargetKey(item) === target.key);
 
   if (!exists) {
-    stack = [...stack, release];
+    stack = [...stack, target];
     await saveStack();
     renderStack();
   }
 }
 
-async function removeRelease(id) {
-  stack = stack.filter((release) => release.id !== id);
+async function removeRelease(key) {
+  stack = stack.filter((release) => getTargetKey(release) !== key);
   await saveStack();
   renderStack();
 }
@@ -105,10 +107,25 @@ async function scanStack() {
     const result = await scanMarketplaceForReleases({
       releases: stack,
       pageLimit: Number(elements.pageLimitInput.value),
+      versionLimit: Number(elements.versionLimitInput.value),
       filters: {
         minimumRating: elements.minimumRatingInput.value,
         shipsFrom: elements.shipsFromInput.value,
         maximumPrice: elements.maximumPriceInput.value
+      },
+      fetchJson: async (url) => {
+        const response = await fetch(url, {
+          credentials: "include",
+          headers: {
+            Accept: "application/vnd.discogs.v2.discogs+json"
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Discogs returned ${response.status} while loading master versions.`);
+        }
+
+        return response.json();
       },
       fetchPage: async (url) => {
         const response = await fetch(url, {
@@ -124,8 +141,13 @@ async function scanStack() {
 
         return response.text();
       },
-      onProgress: ({ release, releaseIndex, releaseCount, page, totalPages }) => {
-        setStatus(`Scanning ${releaseIndex + 1}/${releaseCount}: ${release.title}, page ${page}/${totalPages}.`);
+      onProgress: ({ target, candidate, targetIndex, targetCount, candidateIndex, candidateCount, page, totalPages }) => {
+        const versionText = target.type === "master"
+          ? ` version ${candidateIndex + 1}/${candidateCount}`
+          : "";
+        setStatus(
+          `Scanning ${targetIndex + 1}/${targetCount}: ${target.title}${versionText}, page ${page}/${totalPages}.`
+        );
       }
     });
 
@@ -154,7 +176,7 @@ function renderStack() {
 
   if (!stack.length) {
     elements.stackList.className = "stack-list empty-state";
-    elements.stackList.textContent = "Add exact Discogs release pages, then scan for sellers who have them all.";
+    elements.stackList.textContent = "Add Discogs release or master pages, then scan for sellers who have them all. Masters sweep multiple versions.";
     return;
   }
 
@@ -168,14 +190,14 @@ function renderStack() {
       const title = document.createElement("strong");
       title.textContent = release.title;
       const meta = document.createElement("p");
-      meta.textContent = `Release ${release.id}`;
+      meta.textContent = `${formatTargetType(release)} ${release.id}`;
       body.append(title, meta);
 
       const remove = document.createElement("button");
       remove.className = "remove-button";
       remove.type = "button";
       remove.textContent = "x";
-      remove.addEventListener("click", () => removeRelease(release.id));
+      remove.addEventListener("click", () => removeRelease(getTargetKey(release)));
 
       row.append(body, remove);
       return row;
@@ -228,9 +250,9 @@ function renderResults(sellers, warnings = []) {
       head.append(sellerInfo, badge);
       card.append(head);
 
-      for (const release of stack) {
-        const listing = seller.listingsByRelease.get(release.id);
-        card.append(createListingRow(release, listing));
+      for (const target of stack) {
+        const listing = seller.listingsByRelease.get(getTargetKey(target));
+        card.append(createListingRow(target, listing));
       }
 
       return card;
@@ -249,7 +271,13 @@ function createListingRow(release, listing) {
   title.textContent = release.title;
   const meta = document.createElement("p");
   meta.textContent = listing
-    ? [listing.condition, listing.sleeveCondition, listing.shipsFrom ? `Ships from ${listing.shipsFrom}` : ""]
+    ? [
+        listing.targetKey?.startsWith("master:") ? `Version: ${listing.releaseTitle}` : "",
+        listing.releaseSubtitle,
+        listing.condition,
+        listing.sleeveCondition,
+        listing.shipsFrom ? `Ships from ${listing.shipsFrom}` : ""
+      ]
         .filter(Boolean)
         .join(" / ")
     : "Missing";
@@ -304,7 +332,7 @@ async function getCurrentRelease() {
     const response = await chrome.tabs.sendMessage(tab.id, { type: "DSL_GET_CURRENT_RELEASE" });
     return response?.release ?? null;
   } catch {
-    return parseDiscogsReleaseUrl(tab.url);
+    return parseDiscogsTargetUrl(tab.url);
   }
 }
 
@@ -316,4 +344,26 @@ async function loadStack() {
 
 async function saveStack() {
   await chrome.storage.local.set({ stack });
+}
+
+function normalizeTarget(target) {
+  const type = target?.type === "master" ? "master" : "release";
+  const id = Number(target?.id);
+
+  return {
+    ...target,
+    type,
+    id,
+    key: target?.key || `${type}:${id}`,
+    title: target?.title || `Discogs ${type} ${id}`,
+    url: target?.url || `https://www.discogs.com/${type}/${id}`
+  };
+}
+
+function getTargetKey(target) {
+  return target?.key || `${target?.type === "master" ? "master" : "release"}:${Number(target?.id)}`;
+}
+
+function formatTargetType(target) {
+  return target?.type === "master" ? "Master" : "Release";
 }

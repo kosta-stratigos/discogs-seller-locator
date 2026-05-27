@@ -3,11 +3,11 @@
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === "DSL_GET_CURRENT_RELEASE") {
-      sendResponse({ release: getCurrentRelease() });
+      sendResponse({ release: getCurrentTarget() });
     }
   });
 
-  const release = getCurrentRelease();
+  const release = getCurrentTarget();
 
   if (release) {
     installAddButton(release);
@@ -25,7 +25,7 @@
     button.addEventListener("click", async () => {
       const saved = await chrome.storage.local.get({ stack: [] });
       const stack = Array.isArray(saved.stack) ? saved.stack : [];
-      const exists = stack.some((item) => item.id === release.id);
+      const exists = stack.some((item) => getTargetKey(item) === getTargetKey(release));
 
       if (!exists) {
         await chrome.storage.local.set({ stack: [...stack, release] });
@@ -37,35 +37,46 @@
     document.body.append(button);
   }
 
-  function getCurrentRelease() {
-    const id = parseReleaseId(location.href);
+  function getTargetKey(target) {
+    return `${target?.type === "master" ? "master" : "release"}:${Number(target?.id)}`;
+  }
 
-    if (!id) {
+  function getCurrentTarget() {
+    const target = parseTarget(location.href);
+
+    if (!target) {
       return null;
     }
 
     return {
-      id,
-      title: getReleaseTitle(id),
-      url: `https://www.discogs.com/release/${id}`
+      ...target,
+      title: getReleaseTitle(target),
+      url: `https://www.discogs.com/${target.type}/${target.id}`
     };
   }
 
-  function parseReleaseId(value) {
+  function parseTarget(value) {
     try {
       const url = new URL(value);
       const parts = url.pathname.split("/").filter(Boolean);
       const releaseIndex = parts.indexOf("release");
+      const masterIndex = parts.indexOf("master");
       const sellReleaseIndex = parts[0] === "sell" && parts[1] === "release" ? 1 : -1;
-      const idSource = releaseIndex >= 0 ? parts[releaseIndex + 1] : parts[sellReleaseIndex + 1];
+      const type = masterIndex >= 0 ? "master" : "release";
+      const idSource = masterIndex >= 0
+        ? parts[masterIndex + 1]
+        : releaseIndex >= 0
+          ? parts[releaseIndex + 1]
+          : parts[sellReleaseIndex + 1];
       const match = String(idSource ?? "").match(/^(\d+)/);
-      return match ? Number(match[1]) : 0;
+      const id = match ? Number(match[1]) : 0;
+      return id ? { type, id } : null;
     } catch {
-      return 0;
+      return null;
     }
   }
 
-  function getReleaseTitle(id) {
+  function getReleaseTitle(target) {
     const title =
       document.querySelector("h1")?.textContent ||
       document.querySelector('meta[property="og:title"]')?.content ||
@@ -75,7 +86,7 @@
     return title
       .replace(/\s*\|\s*Discogs\s*$/i, "")
       .replace(/^Release\s+["']?/, "")
-      .trim() || `Discogs release ${id}`;
+      .trim() || `Discogs ${target.type} ${target.id}`;
   }
 
   function showToast(message) {

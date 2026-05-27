@@ -5,14 +5,14 @@ A browser extension for finding Discogs marketplace sellers that have every requ
 ## How It Works
 
 1. Browse Discogs normally.
-2. Open an exact release page and click **Add to Seller Locator**.
+2. Open an exact release page or master release page and click **Add to Seller Locator**.
 3. Repeat for the other titles you want.
 4. Open the extension popup and click **Find sellers**.
 5. Review sellers with complete matches first, then partial matches.
 
-The extension scans Discogs marketplace pages from your browser session and intersects sellers locally. It does not need a Discogs personal access token.
+The extension scans Discogs marketplace pages from your browser session and intersects sellers locally. Master releases are expanded through Discogs' public master versions API, then each selected version is scanned. It does not need a Discogs personal access token.
 
-Optional filters can narrow matches by seller rating, ship-from text, and maximum item price before shipping.
+Optional filters can narrow matches by seller rating, ship-from text, maximum item price before shipping, pages per release, and versions per master.
 
 ## Install Locally
 

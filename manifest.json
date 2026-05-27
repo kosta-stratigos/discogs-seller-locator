@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Discogs Seller Locator",
-  "version": "0.2.0",
-  "description": "Find Discogs sellers who have every release in your stack.",
+  "version": "0.3.0",
+  "description": "Find Discogs sellers who have every release or master in your stack.",
   "permissions": ["activeTab", "storage"],
-  "host_permissions": ["https://www.discogs.com/*"],
+  "host_permissions": ["https://www.discogs.com/*", "https://api.discogs.com/*"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Discogs Seller Locator"

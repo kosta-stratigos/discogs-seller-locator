@@ -1,4 +1,9 @@
 export function parseDiscogsReleaseUrl(value) {
+  const target = parseDiscogsTargetUrl(value);
+  return target?.type === "release" ? target : null;
+}
+
+export function parseDiscogsTargetUrl(value) {
   const source = String(value ?? "").trim();
 
   if (!source) {
@@ -14,8 +19,14 @@ export function parseDiscogsReleaseUrl(value) {
 
     const parts = url.pathname.split("/").filter(Boolean);
     const releaseIndex = parts.indexOf("release");
+    const masterIndex = parts.indexOf("master");
     const sellReleaseIndex = parts[0] === "sell" && parts[1] === "release" ? 1 : -1;
-    const idSource = releaseIndex >= 0 ? parts[releaseIndex + 1] : parts[sellReleaseIndex + 1];
+    const type = masterIndex >= 0 ? "master" : "release";
+    const idSource = masterIndex >= 0
+      ? parts[masterIndex + 1]
+      : releaseIndex >= 0
+        ? parts[releaseIndex + 1]
+        : parts[sellReleaseIndex + 1];
     const id = parseLeadingId(idSource);
 
     if (!id) {
@@ -23,13 +34,22 @@ export function parseDiscogsReleaseUrl(value) {
     }
 
     return {
+      type,
       id,
-      title: titleFromSlug(idSource) || `Discogs release ${id}`,
-      url: `https://www.discogs.com/release/${id}`
+      key: makeTargetKey({ type, id }),
+      title: titleFromSlug(idSource) || `Discogs ${type} ${id}`,
+      url: `https://www.discogs.com/${type}/${id}`
     };
   } catch {
     return null;
   }
+}
+
+export function buildMasterVersionsUrl(masterId, page = 1, perPage = 100) {
+  const url = new URL(`https://api.discogs.com/masters/${masterId}/versions`);
+  url.searchParams.set("page", String(page));
+  url.searchParams.set("per_page", String(perPage));
+  return url.toString();
 }
 
 export function buildMarketplaceUrl(releaseId, page = 1, limit = 250) {
@@ -44,55 +64,128 @@ export async function scanMarketplaceForReleases({
   releases,
   filters = {},
   pageLimit = 3,
+  versionLimit = 25,
   fetchPage,
+  fetchJson,
   onProgress = () => {}
 }) {
   const safePageLimit = clampNumber(pageLimit, 1, 20);
-  const listingsByRelease = new Map();
+  const targets = await resolveScanTargets({
+    targets: releases,
+    versionLimit,
+    fetchJson
+  });
+  const listingsByTarget = new Map();
   const warnings = [];
 
-  for (const [releaseIndex, release] of releases.entries()) {
-    const releaseListings = [];
+  for (const [targetIndex, target] of targets.entries()) {
+    const targetListings = [];
 
-    for (let page = 1; page <= safePageLimit; page += 1) {
-      onProgress({
-        release,
-        releaseIndex,
-        releaseCount: releases.length,
-        page,
-        totalPages: safePageLimit
-      });
+    for (const [candidateIndex, candidate] of target.releases.entries()) {
+      for (let page = 1; page <= safePageLimit; page += 1) {
+        onProgress({
+          target,
+          candidate,
+          targetIndex,
+          targetCount: targets.length,
+          candidateIndex,
+          candidateCount: target.releases.length,
+          page,
+          totalPages: safePageLimit
+        });
 
-      const html = await fetchPage(buildMarketplaceUrl(release.id, page));
-      const parsed = parseMarketplaceHtml(html, release);
-      releaseListings.push(...parsed.listings.filter((listing) => listingPassesFilters(listing, filters)));
+        const html = await fetchPage(buildMarketplaceUrl(candidate.id, page));
+        const parsed = parseMarketplaceHtml(html, candidate, target);
+        targetListings.push(...parsed.listings.filter((listing) => listingPassesFilters(listing, filters)));
 
-      if (!parsed.hasNextPage) {
-        break;
+        if (!parsed.hasNextPage) {
+          break;
+        }
       }
     }
 
-    if (!releaseListings.length) {
-      warnings.push(`No listings found for ${release.title}.`);
+    if (!targetListings.length) {
+      warnings.push(`No listings found for ${target.title}.`);
     }
 
-    listingsByRelease.set(release.id, releaseListings);
+    listingsByTarget.set(target.key, targetListings);
   }
 
   return {
-    sellers: rankSharedSellers(releases, listingsByRelease),
-    listingsByRelease,
+    targets,
+    sellers: rankSharedSellers(targets, listingsByTarget),
+    listingsByTarget,
+    listingsByRelease: listingsByTarget,
     warnings
   };
 }
 
-export function parseMarketplaceHtml(html, release) {
+export async function resolveScanTargets({ targets, versionLimit = 25, fetchJson } = {}) {
+  const safeVersionLimit = clampNumber(versionLimit, 1, 100);
+  const resolved = [];
+
+  for (const rawTarget of targets ?? []) {
+    const target = normalizeTarget(rawTarget);
+
+    if (target.type === "master") {
+      if (typeof fetchJson !== "function") {
+        throw new TypeError("A fetchJson implementation is required to scan master releases.");
+      }
+
+      const versions = await fetchMasterVersions(target.id, safeVersionLimit, fetchJson);
+      resolved.push({
+        ...target,
+        releases: versions
+      });
+    } else {
+      resolved.push({
+        ...target,
+        releases: [targetToRelease(target)]
+      });
+    }
+  }
+
+  return resolved;
+}
+
+export async function fetchMasterVersions(masterId, versionLimit, fetchJson) {
+  const versions = [];
+  const perPage = Math.min(100, Math.max(1, versionLimit));
+  let page = 1;
+  let totalPages = 1;
+
+  while (versions.length < versionLimit && page <= totalPages) {
+    const payload = await fetchJson(buildMasterVersionsUrl(masterId, page, perPage));
+    totalPages = Math.max(1, Number(payload?.pagination?.pages) || 1);
+
+    for (const version of payload?.versions ?? []) {
+      if (versions.length >= versionLimit) {
+        break;
+      }
+
+      versions.push({
+        type: "release",
+        id: Number(version.id),
+        key: makeTargetKey({ type: "release", id: Number(version.id) }),
+        title: version.title || `Discogs release ${version.id}`,
+        subtitle: [version.format, version.country, version.released].filter(Boolean).join(" / "),
+        url: `https://www.discogs.com/release/${version.id}`
+      });
+    }
+
+    page += 1;
+  }
+
+  return versions;
+}
+
+export function parseMarketplaceHtml(html, release, target = release) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
   const listingAnchors = [...doc.querySelectorAll('a[href*="/sell/item/"]')];
   const containers = uniqueNodes(listingAnchors.map(getListingContainer).filter(Boolean));
   const listings = containers
-    .map((container) => parseListingContainer(container, release))
+    .map((container) => parseListingContainer(container, release, target))
     .filter((listing) => listing.id && listing.seller.username);
 
   return {
@@ -102,10 +195,11 @@ export function parseMarketplaceHtml(html, release) {
 }
 
 export function rankSharedSellers(releases, listingsByRelease) {
+  const targets = releases.map(normalizeTarget);
   const sellers = new Map();
 
-  for (const release of releases) {
-    const listings = listingsByRelease.get(release.id) ?? [];
+  for (const target of targets) {
+    const listings = listingsByRelease.get(target.key) ?? listingsByRelease.get(target.id) ?? [];
 
     for (const listing of listings) {
       const key = listing.seller.username.toLowerCase();
@@ -120,19 +214,19 @@ export function rankSharedSellers(releases, listingsByRelease) {
       }
 
       const seller = sellers.get(key);
-      const existing = seller.listingsByRelease.get(release.id);
+      const existing = seller.listingsByRelease.get(target.key);
       seller.rating = Math.max(seller.rating, listing.seller.rating ?? 0);
 
       if (!existing || listing.sortPrice < existing.sortPrice) {
-        seller.listingsByRelease.set(release.id, listing);
+        seller.listingsByRelease.set(target.key, listing);
       }
     }
   }
 
   return [...sellers.values()]
     .map((seller) => {
-      const listings = releases
-        .map((release) => seller.listingsByRelease.get(release.id))
+      const listings = targets
+        .map((target) => seller.listingsByRelease.get(target.key))
         .filter(Boolean);
       const subtotal = listings.reduce((sum, listing) => sum + listing.sortPrice, 0);
 
@@ -140,8 +234,8 @@ export function rankSharedSellers(releases, listingsByRelease) {
         ...seller,
         listings,
         matchedCount: listings.length,
-        missingCount: releases.length - listings.length,
-        isComplete: listings.length === releases.length,
+        missingCount: targets.length - listings.length,
+        isComplete: listings.length === targets.length,
         subtotal
       };
     })
@@ -218,7 +312,7 @@ export function parsePriceText(text) {
   };
 }
 
-function parseListingContainer(container, release) {
+function parseListingContainer(container, release, target) {
   const text = stripText(container.textContent);
   const itemAnchor = container.querySelector('a[href*="/sell/item/"]');
   const sellerAnchor = findSellerAnchor(container);
@@ -227,8 +321,13 @@ function parseListingContainer(container, release) {
 
   return {
     id: parseListingId(itemAnchor?.href ?? ""),
+    targetId: target.id,
+    targetKey: target.key,
+    targetTitle: target.title,
     releaseId: release.id,
     releaseTitle: release.title,
+    releaseUrl: release.url,
+    releaseSubtitle: release.subtitle ?? "",
     condition: extractField(text, /Media Condition\s*:?\s*([^]*?)(Sleeve Condition|Ships From|Seller|$)/i) ||
       extractCondition(text) ||
       "Condition unavailable",
@@ -326,6 +425,35 @@ function extractUsername(href) {
 function parseListingId(href) {
   const match = href.match(/\/sell\/item\/(\d+)/);
   return match ? Number(match[1]) : 0;
+}
+
+function normalizeTarget(target) {
+  const type = target?.type === "master" ? "master" : "release";
+  const id = Number(target?.id);
+
+  return {
+    ...target,
+    type,
+    id,
+    key: target?.key || makeTargetKey({ type, id }),
+    title: target?.title || `Discogs ${type} ${id}`,
+    url: target?.url || `https://www.discogs.com/${type}/${id}`
+  };
+}
+
+function targetToRelease(target) {
+  return {
+    type: "release",
+    id: target.id,
+    key: makeTargetKey({ type: "release", id: target.id }),
+    title: target.title,
+    subtitle: target.subtitle ?? "",
+    url: target.url
+  };
+}
+
+function makeTargetKey(target) {
+  return `${target.type === "master" ? "master" : "release"}:${Number(target.id)}`;
 }
 
 function absolutizeDiscogsUrl(href) {
